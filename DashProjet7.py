@@ -5,82 +5,121 @@ Created on Mon Mar 15 20:20:15 2021
 @author: stein
 """
 import streamlit as st
-import streamlit.components.v1 as components
 import matplotlib.pyplot as plt
-import ToolGraph  as tg
-#import numpy as np
+
+import numpy as np
 import pandas as pd
 
 from PIL import Image
+
+import json
 
 import joblib
 import shap
 
 
-def st_shap(plot, height=None):
-    shap_html = f"<head>{shap.getjs()}</head><body>{plot.html()}</body>"
-    components.html(shap_html, height=height)
+PARAM = "Libels"
+FILEMODEL = "joblib_Explainer.bz2"
 
 ImgCredit = Image.open("ImgPret.JPG")
+ImgSummary = Image.open("importance.JPG")
 
-FILENAME = "f_xtest_model.csv"
-FILEMODEL = "joblib_Explainer.bz2"
-FILESHAP = "f_shap_values.csv"
-
-st.set_page_config(
-    page_title="Scoring Prêt à dépenser", page_icon=ImgCredit,
-)
+st.set_page_config(page_title="Prêt à dépenser", page_icon=ImgCredit,)
 
 exload = joblib.load(filename=FILEMODEL)
 
-df_dash = pd.read_csv(FILENAME, delimiter=",", na_values=['-'], encoding = "utf-8", low_memory=False)
 
-Ikeys = df_dash[["SK_ID_CURR"]].copy()
+def main():
+    # chargement et préparation données
+    datalib = load_libel()
+    df_dash, Ikeys, df_result, df_predict, df_mean, shap_values_tst = load_data(
+        datalib['File'], datalib['Col'])
+    lst_var = load_list_var(df_dash)
+    # Display header.
+    st.markdown("<br>", unsafe_allow_html=True)
 
-df_dash_stat = df_dash.copy()
+    # Affichage sidebar
+    st.sidebar.image(ImgCredit, width=160)
 
-df_dash.set_index("SK_ID_CURR" , inplace = True)
-df_result = df_dash["Target"]
-df_predict = df_dash["Predict"]
-df_dash = df_dash.drop(columns = ["Target","Predict"])
+    option = st.sidebar.selectbox("Client Nr", Ikeys)
+    Lang = st.sidebar.selectbox("Language", datalib['Languages'])
+    st.sidebar.image(ImgSummary, width=480)
 
-df_shap = pd.read_csv(FILESHAP, delimiter=",", na_values=['-'], encoding = "utf-8", low_memory=False)
+    # Affichage haut de page
+    st.title(datalib['TitlePg'][Lang] + str(option))
 
-shap_values_tst = df_shap.to_numpy()
+    i = Ikeys.loc[Ikeys.SK_ID_CURR == option].index
+    prob = df_predict.loc[option]
 
-fig = shap.summary_plot(shap_values_tst, df_dash, plot_type="bar")
-plt.savefig('summary.JPG',format="JPG", bbox_inches = 'tight')
+    if df_result.loc[option] == 0:
+        st.markdown(datalib['Accord'][Lang], unsafe_allow_html=True)
+    else:
+        st.markdown(datalib['Refus'][Lang], unsafe_allow_html=True)
 
-# Display header.
-st.markdown("<br>", unsafe_allow_html=True)
-st.sidebar.image(ImgCredit, width=160)
+    # Affichage interprétation modèle
+    fig = shap.decision_plot(
+        exload.expected_value, shap_values_tst[i, :], df_dash.loc[[option]], show=False)
+    plt.savefig('scratch.JPG', format="JPG", bbox_inches='tight')
 
-st.title('Scoring pour accord de crédit')
-st.markdown("Choisissez un client et voyez si le crédit peut-être accordé ou non.")
+    ImgScratch = Image.open("scratch.JPG")
+    st.image(ImgScratch, width=640,
+             caption=datalib['LibGraf'][Lang] + str(prob))
 
-option = st.sidebar.selectbox('Choisissez un identifiant client',Ikeys)
+    # Affichage
+    Var = st.selectbox(datalib['SelVar'][Lang], lst_var)
 
-i = Ikeys.loc[Ikeys.SK_ID_CURR == option].index
+    # Add histogram data
+    # Setting title, labels, etc.
+    ar = np.array([[df_dash.loc[option][Var]], [
+                  df_mean.loc[Var][0]], [df_mean.loc[Var][1]]])
+    df = pd.DataFrame(
+        ar, index=[str(option), 'Target = 0', 'Target = 1'], columns=[Var])
 
-if df_result.loc[option] == 0:
-    st.sidebar.markdown("statut du crédit : accordé")
-else:
-    st.sidebar.markdown("statut du crédit : refusé")
-ImgSummary = Image.open("summary.JPG")
-st.sidebar.image(ImgSummary, width=480)
+    fig, ax = plt.subplots()
+    ax.bar(df.index, df[Var])
+    ax.set(title=datalib['LibComp'][Lang] + Var,
+           ylabel=datalib['LibVal'][Lang], xlabel=datalib['LibXlabel'][Lang])
+    ax.set_xticklabels(df.index, rotation=60)
 
-#st.subheader("Graphe d'interprétation pour le client " + str(option) ) 
+    st.pyplot(fig)
 
-#st_shap(shap.force_plot(exload.expected_value, shap_values_tst[i,:], df_dash.loc[[option]]))
 
-fig = shap.decision_plot(exload.expected_value, shap_values_tst[i,:], df_dash.loc[[option]],show=False)
-plt.savefig('scratch.JPG',format="JPG", bbox_inches = 'tight')
+@st.cache
+def load_libel():
+    f = open(PARAM, "r")
+    # Reading from file
+    dataj = json.loads(f.read())
+    
+    return dataj
 
-ImgScratch = Image.open("scratch.JPG")
-st.image(ImgScratch, width=640,caption = "Graphe d'interprétation pour le client " + str(option) )
+@st.cache
+def load_list_var(idf):
+    list_col = list(idf)
+    converted_list = [x.lower() for x in list_col]
+    converted_list.sort()
+    #list_col.sort()
+    return converted_list
 
-colkeep = ["SK_ID_CURR","Target"]
-fig= tg.calc_pie(df_dash_stat.copy(),colkeep,"nombre des crédits","Statut","count")
-plt.savefig('pie.JPG',format="JPG", bbox_inches = 'tight')
-ImgPie = Image.open("pie.JPG")
-st.image(ImgPie, width=320)
+@st.cache
+def load_data(iname, icol):
+    df_file = pd.read_csv(iname["FILENAME"], delimiter=",", na_values=[
+                          '-'], encoding="utf-8", low_memory=False)
+    df_keys = df_file[[icol["Key"]]].copy()
+    df_file.set_index(icol["Key"], inplace=True)
+    df_file_result = df_file[icol["Target"]]
+    df_file_predict = df_file[icol["Predict"]]
+    df_file = df_file.drop(columns=[icol["Target"], icol["Predict"]])
+    df_file.columns = map(str.lower, df_file.columns)
+    # df_mean
+    df_filem = pd.read_csv(iname["FILEMEAN"], delimiter=",", na_values=[
+                           '-'], encoding="utf-8", low_memory=False)
+    df_filem.set_index(icol["Var"], inplace=True)
+    # shap values
+    df_shap = pd.read_csv(iname["FILESHAP"], delimiter=",", na_values=[
+                          '-'], encoding="utf-8", low_memory=False)
+
+    return df_file, df_keys, df_file_result, df_file_predict, df_filem, df_shap.to_numpy()
+
+
+if __name__ == '__main__':
+    main()
