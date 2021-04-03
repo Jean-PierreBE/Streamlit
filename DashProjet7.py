@@ -21,7 +21,7 @@ import shap
 PARAM = "Libels"
 FILEMODEL = "joblib_Explainer.bz2"
 
-ImgCredit = Image.open("ImgPret.JPG")
+ImgCredit = Image.open("ImgPret.jpg")
 ImgSummary = Image.open("importance.JPG")
 
 st.set_page_config(page_title="Prêt à dépenser", page_icon=ImgCredit,)
