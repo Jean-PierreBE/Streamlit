@@ -17,6 +17,7 @@ import json
 import joblib
 import shap
 
+import xgboost
 
 PARAM = "Libels"
 FILEMODEL = "joblib_Explainer.bz2"
