@@ -17,9 +17,6 @@ import json
 import joblib
 import shap
 
-import sklearn
-from sklearn.ensemble import GradientBoostingClassifier
-
 PARAM = "Libels"
 FILEMODEL = "joblib_Explainer.bz2"
 
